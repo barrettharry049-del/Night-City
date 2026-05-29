@@ -8,6 +8,7 @@ on:
       - "index.html"
       - "style.css"
       - "wallpaper.js"
+      - "refresh-guard.js"
       - "live-data.js"
       - "Update-LiveData.ps1"
       - ".github/workflows/**"
@@ -19,6 +20,9 @@ permissions:
   contents: read
   pages: write
   id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 concurrency:
   group: pages
