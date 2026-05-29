@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - ".github/workflows/update-live-data.yml"
-      - "tools/Update-LiveData.ps1"
+      - "Update-LiveData.ps1"
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
@@ -27,7 +27,7 @@ jobs:
 
       - name: Refresh public data file
         shell: pwsh
-        run: ./tools/Update-LiveData.ps1 -IntervalSeconds 600 -RetrySeconds 30 -NoRetryOnFailure
+        run: ./Update-LiveData.ps1 -IntervalSeconds 600 -RetrySeconds 30 -NoRetryOnFailure
 
       - name: Commit refreshed data
         shell: pwsh
