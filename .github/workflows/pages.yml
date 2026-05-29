@@ -13,7 +13,7 @@ on:
       - ".github/workflows/**"
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/6 * * * *"
 
 permissions:
   contents: read
@@ -35,7 +35,24 @@ jobs:
       - name: Generate live data
         shell: pwsh
         run: |
-          ./Update-LiveData.ps1 -NoRetryOnFailure -OutFile "$PWD/live-data.js"
+          ./Update-LiveData.ps1 -IntervalSeconds 360 -NoRetryOnFailure -OutFile "$PWD/live-data.js"
+
+      - name: Add stale-data grace cycle
+        shell: pwsh
+        run: |
+          $path = Join-Path $PWD "live-data.js"
+          $content = Get-Content -Raw $path
+          $match = [regex]::Match($content, "window\.RAINLINE_DATA\s*=\s*(.*?);\s*window\.dispatchEvent", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+          if (-not $match.Success) {
+            throw "Could not find RAINLINE_DATA payload in live-data.js"
+          }
+          $payload = $match.Groups[1].Value | ConvertFrom-Json
+          $generatedAt = [datetimeoffset]::Parse($payload.generatedAt)
+          $payload.refreshIntervalSeconds = 720
+          $payload.nextRefreshAt = $generatedAt.AddSeconds(720).ToString("o")
+          $json = $payload | ConvertTo-Json -Depth 20 -Compress
+          $js = "window.RAINLINE_DATA = $json;`nwindow.dispatchEvent(new CustomEvent('rainline-data-updated', { detail: window.RAINLINE_DATA }));`n"
+          [System.IO.File]::WriteAllText($path, $js, [System.Text.UTF8Encoding]::new($false))
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
