@@ -1,6 +1,16 @@
 name: Update and publish Rainline City
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "style.css"
+      - "wallpaper.js"
+      - "live-data.js"
+      - "Update-LiveData.ps1"
+      - ".github/workflows/**"
   workflow_dispatch:
   schedule:
     - cron: "*/10 * * * *"
