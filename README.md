@@ -48,7 +48,7 @@ Most billboard slides rotate every 10 seconds. The Transpower fuel-generation sl
 - City Link branded data-ad slides include Toyota hybrid drive, Spotify city music feed, Google city indexing, Tesla Energy charge window, and Microsoft Azure city cloud.
 - NEMA emergency alerts only when the alert feed contains a real current item.
 
-The hidden scheduled updater refreshes all live feeds every 10 minutes. The lower-right text on the billboard counts down to the next refresh.
+The hidden local scheduled updater refreshes all live feeds every 10 minutes. On GitHub Pages, `.github/workflows/update-live-data.yml` runs the same updater every 10 minutes and commits a fresh `live-data.js`. The lower-right text on the billboard counts down to the next refresh.
 
 ## Live feeds
 
@@ -63,6 +63,8 @@ The hidden scheduled updater refreshes all live feeds every 10 minutes. The lowe
 ## Live data updater
 
 Lively loads this wallpaper as a local web page, so some feeds can be blocked by browser CORS rules. The Windows scheduled task named `Rainline City Live Data` refreshes `live-data.js` every 10 minutes in the background with the PowerShell window hidden.
+
+The public GitHub Pages version uses the GitHub Actions workflow `Update live data`. It can also be run manually from the repository's Actions tab with `Run workflow`.
 
 If you need to reinstall the automatic refresh later, run `Install-LiveDataScheduledTask.cmd` once.
 
