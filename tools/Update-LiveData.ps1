@@ -2,12 +2,18 @@ param(
   [switch]$Loop,
   [int]$IntervalSeconds = 600,
   [int]$RetrySeconds = 30,
-  [switch]$NoRetryOnFailure
+  [switch]$NoRetryOnFailure,
+  [string]$OutFile = ""
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$outFile = Join-Path $root "live-data.js"
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+if ([string]::IsNullOrWhiteSpace($OutFile)) {
+  $outFile = Join-Path $scriptDir "live-data.js"
+} else {
+  $outFile = $OutFile
+}
 
 function ConvertFrom-HtmlText {
   param([string]$Text)
