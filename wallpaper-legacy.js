@@ -4,8 +4,8 @@
   var uplinkMs = 6 * 60 * 1000;
   var warningMs = 2 * uplinkMs;
   var cacheHoldMs = 2 * 60 * 60 * 1000;
-  var defaultDuration = 10000;
-  var generationDuration = 20000;
+  var defaultDuration = 15000;
+  var generationDuration = 25000;
   var rnzLimit = 6;
   var nextUplinkAt = new Date().getTime() + uplinkMs;
   var slideStartedAt = new Date().getTime();
@@ -436,7 +436,7 @@
       source: source,
       title: title,
       body: body,
-      heartbeat: heartbeat || "CITY PULSE",
+      heartbeat: heartbeat || "SIGNAL",
       duration: duration || defaultDuration
     });
   }
@@ -589,9 +589,9 @@
     var value = heartbeatValue(slide);
     var progress = Math.min(1, (new Date().getTime() - slideStartedAt) / Math.max(1000, slide.duration));
     var shown = Math.max(1, value * progress);
-    if (dom.heartbeatLabel) dom.heartbeatLabel.innerHTML = escapeHtml(slide.heartbeat);
+    if (dom.heartbeatLabel) dom.heartbeatLabel.innerHTML = "";
     if (dom.heartbeatFill) dom.heartbeatFill.style.width = Math.max(3, shown * 10) + "%";
-    if (dom.heartbeatBars) dom.heartbeatBars.innerHTML = asciiBars(shown);
+    if (dom.heartbeatBars) dom.heartbeatBars.innerHTML = "";
   }
 
   function paidAdViewportSize(min, ratio, max) {
