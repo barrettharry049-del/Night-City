@@ -32,6 +32,19 @@
     return minutes + ":" + String(seconds).padStart(2, "0");
   }
 
+  function safeDataAge() {
+    if (typeof formatSignalAge === "function") {
+      return formatSignalAge().replace(/^SIGNAL AGE/i, "DATA AGE");
+    }
+
+    if (!window.RAINLINE_DATA || !window.RAINLINE_DATA.generatedAt) return "DATA AGE --";
+    var generatedAt = new Date(window.RAINLINE_DATA.generatedAt);
+    if (!Number.isFinite(generatedAt.getTime())) return "DATA AGE --";
+    var minutes = Math.max(0, Math.floor((Date.now() - generatedAt.getTime()) / 60000));
+    if (minutes < 60) return "DATA AGE " + String(minutes).padStart(2, "0") + "M";
+    return "DATA AGE " + Math.floor(minutes / 60) + "H";
+  }
+
   function nextSyncTarget(forceWarning) {
     if (forceWarning && typeof nextReconnectDate === "function") return nextReconnectDate();
     if (typeof nextRefreshDate === "function") return nextRefreshDate();
@@ -63,11 +76,10 @@
   function footerHtml(forceWarning) {
     var warning = Boolean(forceWarning || (typeof uplinkNeedsAttention === "function" ? uplinkNeedsAttention() : fallbackNeedsAttention()));
     var warningClass = warning ? " is-warning" : "";
-    var syncTarget = nextSyncTarget(warning);
     var uplinkTarget = typeof nextUplinkDate === "function" ? nextUplinkDate() : fallbackNextUplink();
 
     return [
-      '<span class="sync-countdown' + warningClass + '">NEXT SYNC ' + safeHtml(safeCountdown(syncTarget)) + "</span>",
+      '<span class="data-age">' + safeHtml(safeDataAge()) + "</span>",
       '<span class="uplink-countdown' + warningClass + '">NEXT UPLINK ' + safeHtml(safeCountdown(uplinkTarget)) + "</span>"
     ].join("");
   }
