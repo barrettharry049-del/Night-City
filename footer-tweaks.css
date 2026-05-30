@@ -15,6 +15,7 @@
   min-width: 0;
 }
 
+.timestamp .data-age,
 .timestamp .sync-countdown,
 .timestamp .uplink-countdown {
   position: static;
@@ -25,10 +26,13 @@
   white-space: nowrap;
 }
 
+.timestamp .data-age,
+.timestamp span.data-age,
 .timestamp .sync-countdown {
   flex: 1 1 auto;
-  color: rgba(122, 238, 255, 0.78);
+  color: rgba(124, 255, 178, 0.9);
   text-align: left;
+  text-shadow: 0 0 9px rgba(124, 255, 178, 0.32);
 }
 
 .timestamp .uplink-countdown {
@@ -38,15 +42,20 @@
   text-align: right;
 }
 
-.timestamp .sync-countdown.is-warning,
 .timestamp .uplink-countdown.is-warning,
-.billboard-shell.signal-lost .timestamp .sync-countdown,
 .billboard-shell.signal-lost .timestamp .uplink-countdown {
   color: rgba(255, 48, 88, 0.98);
   text-shadow:
     1px 0 rgba(255, 42, 199, 0.72),
     -1px 0 rgba(76, 225, 255, 0.42),
     0 0 14px rgba(255, 48, 88, 0.54);
+}
+
+.timestamp .data-age.is-warning,
+.billboard-shell.signal-lost .timestamp .data-age,
+.billboard-shell.signal-lost .timestamp .sync-countdown {
+  color: rgba(124, 255, 178, 0.9);
+  text-shadow: 0 0 9px rgba(124, 255, 178, 0.32);
 }
 
 .city-ad-scan i {
