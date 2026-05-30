@@ -24,6 +24,112 @@
   ];
 
   var dom = {};
+  var paidAd = {};
+  var currentPaidAd = null;
+  var forcedAd = queryValue("ad");
+
+  var paidAds = [
+    {
+      tag: "REAL TASTE // REAL MEMORIES",
+      logoHtml: wordmarkLogo("Coca-Cola", "#ff2645", "Coca-Cola"),
+      name: "COCA-COLA",
+      copy: "SINCE BEFORE WW III",
+      primary: "#ffffff",
+      secondary: "#ff2645",
+      primarySoft: "rgba(255, 255, 255, 0.28)",
+      secondarySoft: "rgba(255, 38, 69, 0.24)"
+    },
+    {
+      tag: "MIDNIGHT BUCKET",
+      logoHtml: wordmarkLogo("KFC", "#f6fbff", "KFC"),
+      name: "KFC",
+      copy: "HOT FOOD // COLD CITY",
+      primary: "#f6fbff",
+      secondary: "#ff2a35",
+      primarySoft: "rgba(246, 251, 255, 0.22)",
+      secondarySoft: "rgba(255, 42, 53, 0.24)"
+    },
+    {
+      tag: "NETWORK BUY",
+      logoHtml: wordmarkLogo("Spark", "#ff4fd8", "spark"),
+      name: "SPARK",
+      copy: "HELLO TOMORROW",
+      primary: "#ff4fd8",
+      secondary: "#62f0ff",
+      primarySoft: "rgba(255, 79, 216, 0.26)",
+      secondarySoft: "rgba(98, 240, 255, 0.2)"
+    },
+    {
+      tag: "CHARGE PARTNER",
+      logoHtml: wordmarkLogo("BP Charge", "#78ff84", "bp charge"),
+      name: "BP CHARGE",
+      copy: "RAPID EV CHARGING",
+      primary: "#78ff84",
+      secondary: "#fff06d",
+      primarySoft: "rgba(120, 255, 132, 0.24)",
+      secondarySoft: "rgba(255, 240, 109, 0.22)"
+    },
+    {
+      tag: "DISTRICT AD",
+      logoHtml: wordmarkLogo("Nike", "#ffffff", "NIKE"),
+      name: "NIKE",
+      copy: "JUST DO IT",
+      primary: "#ffffff",
+      secondary: "#62f0ff",
+      primarySoft: "rgba(255, 255, 255, 0.24)",
+      secondarySoft: "rgba(98, 240, 255, 0.18)"
+    },
+    {
+      tag: "GALAXY OPTIC",
+      logoHtml: wordmarkLogo("Samsung", "#c7d4ff", "SAMSUNG"),
+      name: "SAMSUNG",
+      copy: "SEE THE NIGHT DIFFERENTLY",
+      primary: "#c7d4ff",
+      secondary: "#b05cff",
+      primarySoft: "rgba(199, 212, 255, 0.26)",
+      secondarySoft: "rgba(176, 92, 255, 0.24)"
+    },
+    {
+      tag: "THINK LESS.",
+      logoHtml: wordmarkLogo("Apple", "#f7fbff", "APPLE"),
+      name: "APPLE",
+      copy: "BE A SHEEP",
+      primary: "#f7fbff",
+      secondary: "#d9d9e8",
+      primarySoft: "rgba(247, 251, 255, 0.24)",
+      secondarySoft: "rgba(217, 217, 232, 0.18)"
+    },
+    {
+      tag: "DREAM FEED AVAILABLE",
+      logoHtml: wordmarkLogo("Netflix", "#E50914", "NETFLIX"),
+      name: "NETFLIX",
+      copy: "CONTINUE WATCHING: YOUR LIFE, BUT NICE",
+      primary: "#ff2634",
+      secondary: "#f7fbff",
+      primarySoft: "rgba(255, 38, 52, 0.28)",
+      secondarySoft: "rgba(247, 251, 255, 0.18)"
+    },
+    {
+      tag: "PUBLIC SAFETY NOTICE",
+      logoHtml: wordmarkLogo("Public Safety Notice", "#ffea84", "02:00"),
+      name: "CURFEW BEGINS",
+      copy: "STAY IN LIT DISTRICTS",
+      primary: "#ffea84",
+      secondary: "#ff3058",
+      primarySoft: "rgba(255, 234, 132, 0.26)",
+      secondarySoft: "rgba(255, 48, 88, 0.26)"
+    },
+    {
+      tag: "MOBILITY BUY",
+      logoHtml: wordmarkLogo("Toyota", "#f6fbff", "TOYOTA"),
+      name: "TOYOTA",
+      copy: "LET'S GO PLACES",
+      primary: "#f6fbff",
+      secondary: "#ff335a",
+      primarySoft: "rgba(246, 251, 255, 0.22)",
+      secondarySoft: "rgba(255, 51, 90, 0.22)"
+    }
+  ];
 
   function bySelector(selector) {
     return document.querySelector(selector);
@@ -55,6 +161,28 @@
       .replace(/'/g, "&#39;");
   }
 
+  function queryValue(name) {
+    var search = window.location && window.location.search ? window.location.search.substring(1) : "";
+    var parts = search ? search.split("&") : [];
+    var i;
+    var pair;
+    for (i = 0; i < parts.length; i += 1) {
+      pair = parts[i].split("=");
+      if (decodeURIComponent(pair[0] || "") === name) {
+        return decodeURIComponent((pair[1] || "").replace(/\+/g, " "));
+      }
+    }
+    return "";
+  }
+
+  function wordmarkLogo(label, fill, word) {
+    var size = word.length > 14 ? 22 : word.length > 9 ? 27 : 34;
+    return "<svg viewBox=\"0 0 180 58\" role=\"img\" aria-label=\"" + escapeHtml(label) + "\">" +
+      "<text class=\"logo-word\" x=\"90\" y=\"38\" fill=\"" + escapeHtml(fill) + "\" text-anchor=\"middle\" style=\"font-size:" + size + "px;\">" +
+      escapeHtml(word) +
+      "</text></svg>";
+  }
+
   function truncate(value, limit) {
     var output = text(value).replace(/\s+/g, " ");
     if (output.length <= limit) return output;
@@ -80,8 +208,47 @@
   }
 
   function parseDate(value) {
+    var source;
+    var date;
+    var match;
+    var milliseconds;
+    var offsetSign;
+    var offsetMinutes;
+    var time;
+
     if (!value) return null;
-    var date = new Date(value);
+
+    date = new Date(value);
+    if (isFinite(date.getTime())) return date;
+
+    source = text(value).replace(/^\s+|\s+$/g, "");
+    source = source.replace(/\.(\d{3})\d+/, ".$1");
+    date = new Date(source);
+    if (isFinite(date.getTime())) return date;
+
+    match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|([+-])(\d{2}):?(\d{2}))?$/.exec(source);
+    if (!match) return null;
+
+    milliseconds = match[7] || "0";
+    while (milliseconds.length < 3) milliseconds += "0";
+
+    time = Date.UTC(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4]),
+      Number(match[5]),
+      Number(match[6] || 0),
+      Number(milliseconds)
+    );
+
+    if (match[8] && match[8] !== "Z") {
+      offsetSign = match[9] === "-" ? -1 : 1;
+      offsetMinutes = (Number(match[10]) * 60) + Number(match[11]);
+      time -= offsetSign * offsetMinutes * 60000;
+    }
+
+    date = new Date(time);
     return isFinite(date.getTime()) ? date : null;
   }
 
@@ -310,7 +477,7 @@
     var filled = Math.max(0, Math.min(10, Math.round(value)));
     var output = "";
     var i;
-    for (i = 0; i < 10; i += 1) output += i < filled ? "█" : "░";
+    for (i = 0; i < 10; i += 1) output += i < filled ? "#" : "-";
     return output;
   }
 
@@ -326,6 +493,39 @@
 
   function setClass(element, className) {
     if (element) element.className = className;
+  }
+
+  function addClass(element, className) {
+    if (!element) return;
+    if ((" " + element.className + " ").indexOf(" " + className + " ") < 0) {
+      element.className = element.className ? element.className + " " + className : className;
+    }
+  }
+
+  function removeClass(element, className) {
+    if (!element) return;
+    element.className = (" " + element.className + " ").replace(" " + className + " ", " ").replace(/^\s+|\s+$/g, "");
+  }
+
+  function clampNumber(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function randomBetween(min, max) {
+    return min + Math.floor(Math.random() * (max - min + 1));
+  }
+
+  function randomChoice(list) {
+    if (!list || !list.length) return null;
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function nextFrame(callback) {
+    if (window.requestAnimationFrame) {
+      window.requestAnimationFrame(callback);
+    } else {
+      setTimeout(callback, 16);
+    }
   }
 
   function renderFooter() {
@@ -394,6 +594,118 @@
     if (dom.heartbeatBars) dom.heartbeatBars.innerHTML = asciiBars(shown);
   }
 
+  function paidAdViewportSize(min, ratio, max) {
+    return clampNumber(window.innerWidth * ratio, min, max);
+  }
+
+  function setPaidAdBaseSizes(ad) {
+    var tagLength;
+    var nameLength;
+    var copyLength;
+    var tagSize;
+    var nameSize;
+    var copySize;
+    if (!paidAd.slot) return;
+
+    tagLength = text(ad.tag).length;
+    nameLength = text(ad.name).length;
+    copyLength = text(ad.copy).length;
+
+    tagSize = paidAdViewportSize(5, 0.0045, 9);
+    nameSize = paidAdViewportSize(7, 0.0068, 13);
+    copySize = paidAdViewportSize(6, 0.0062, 12);
+
+    if (tagLength > 22) tagSize *= 0.84;
+    else if (tagLength > 15) tagSize *= 0.92;
+
+    if (nameLength > 12) nameSize *= 0.9;
+    if (copyLength > 34) copySize *= 0.76;
+    else if (copyLength > 25) copySize *= 0.88;
+
+    paidAd.slot.style.setProperty("--paid-ad-tag-size", clampNumber(tagSize, 4, 9).toFixed(1) + "px");
+    paidAd.slot.style.setProperty("--paid-ad-name-size", clampNumber(nameSize, 5.5, 13).toFixed(1) + "px");
+    paidAd.slot.style.setProperty("--paid-ad-copy-size", clampNumber(copySize, 4.2, 12).toFixed(1) + "px");
+    paidAd.slot.style.setProperty("--paid-ad-logo-scale", copyLength > 30 || tagLength > 20 ? "62%" : "70%");
+  }
+
+  function shrinkPaidAdText(element, propertyName, minSize) {
+    var style;
+    var size;
+    var attempts = 0;
+    if (!element || !paidAd.slot || !window.getComputedStyle) return;
+
+    style = window.getComputedStyle(element, null);
+    size = parseFloat(style && style.fontSize ? style.fontSize : "8");
+
+    while (
+      attempts < 16 &&
+      size > minSize &&
+      (element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1)
+    ) {
+      size -= 0.5;
+      paidAd.slot.style.setProperty(propertyName, Math.max(minSize, size).toFixed(1) + "px");
+      attempts += 1;
+    }
+  }
+
+  function fitPaidAdText() {
+    if (!paidAd.slot || !paidAd.frame) return;
+    shrinkPaidAdText(paidAd.tag, "--paid-ad-tag-size", 4);
+    shrinkPaidAdText(paidAd.name, "--paid-ad-name-size", 5.5);
+    shrinkPaidAdText(paidAd.copy, "--paid-ad-copy-size", 4.2);
+  }
+
+  function setPaidAd(ad) {
+    if (!ad || !paidAd.slot || !paidAd.frame) return;
+
+    currentPaidAd = ad;
+    setPaidAdBaseSizes(ad);
+    if (paidAd.tag) paidAd.tag.innerHTML = escapeHtml(ad.tag);
+    if (paidAd.logo) paidAd.logo.innerHTML = ad.logoHtml;
+    if (paidAd.name) paidAd.name.innerHTML = escapeHtml(ad.name);
+    if (paidAd.copy) paidAd.copy.innerHTML = escapeHtml(ad.copy);
+    paidAd.slot.style.setProperty("--ad-primary", ad.primary);
+    paidAd.slot.style.setProperty("--ad-secondary", ad.secondary);
+    paidAd.slot.style.setProperty("--ad-primary-soft", ad.primarySoft);
+    paidAd.slot.style.setProperty("--ad-secondary-soft", ad.secondarySoft);
+
+    nextFrame(function () {
+      nextFrame(fitPaidAdText);
+    });
+  }
+
+  function choosePaidAd() {
+    var target;
+    var i;
+    var haystack;
+    if (forcedAd) {
+      target = forcedAd.toLowerCase();
+      for (i = 0; i < paidAds.length; i += 1) {
+        haystack = (paidAds[i].tag + " " + paidAds[i].name + " " + paidAds[i].copy).toLowerCase();
+        if (haystack.indexOf(target) >= 0) return paidAds[i];
+      }
+    }
+    return randomChoice(paidAds);
+  }
+
+  function showPaidAd() {
+    if (!paidAd.slot) return;
+    setPaidAd(choosePaidAd());
+    removeClass(paidAd.slot, "is-active");
+    if (paidAd.slot.getBoundingClientRect) paidAd.slot.getBoundingClientRect();
+    addClass(paidAd.slot, "is-active");
+    setTimeout(function () {
+      removeClass(paidAd.slot, "is-active");
+    }, 6000);
+  }
+
+  function schedulePaidAds() {
+    setTimeout(function () {
+      showPaidAd();
+      schedulePaidAds();
+    }, randomBetween(6500, 18000));
+  }
+
   function loadFreshData() {
     var script = document.createElement("script");
     nextUplinkAt = new Date().getTime() + uplinkMs;
@@ -428,6 +740,12 @@
     dom.body = bySelector("[data-sign-body]");
     dom.ticker = bySelector("[data-sign-ticker]");
     dom.time = bySelector("[data-sign-time]");
+    paidAd.slot = bySelector(".paid-ad-slot");
+    paidAd.frame = bySelector("[data-paid-ad-frame]");
+    paidAd.tag = bySelector("[data-paid-ad-tag]");
+    paidAd.logo = bySelector("[data-paid-ad-logo]");
+    paidAd.name = bySelector("[data-paid-ad-name]");
+    paidAd.copy = bySelector("[data-paid-ad-copy]");
   }
 
   function start() {
@@ -440,6 +758,15 @@
     }
     buildSlides();
     renderSlide(true);
+    showPaidAd();
+    schedulePaidAds();
+    if (window.addEventListener) {
+      window.addEventListener("resize", function () {
+        if (!currentPaidAd) return;
+        setPaidAdBaseSizes(currentPaidAd);
+        nextFrame(fitPaidAdText);
+      });
+    }
     setInterval(tick, 1000);
   }
 
