@@ -6,8 +6,10 @@ on:
       - main
     paths:
       - "index.html"
+      - "index-tv.html"
       - "style.css"
       - "wallpaper.js"
+      - "wallpaper-legacy.js"
       - "refresh-guard.js"
       - "live-data.js"
       - "Update-LiveData.ps1"
