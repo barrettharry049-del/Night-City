@@ -1,21 +1,23 @@
 .timestamp {
   position: relative;
-  display: block;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  justify-content: space-between;
   align-self: stretch;
-  min-height: 1.22em;
   width: 100%;
+  gap: 8px;
   text-align: left;
 }
 
 .timestamp span {
   display: block;
+  min-width: 0;
 }
 
 .timestamp .sync-countdown,
 .timestamp .uplink-countdown {
-  position: absolute;
-  bottom: 0;
-  max-width: 49%;
+  position: static;
   overflow: hidden;
   text-overflow: clip;
   font-variant-numeric: tabular-nums;
@@ -24,13 +26,14 @@
 }
 
 .timestamp .sync-countdown {
-  left: 0;
+  flex: 1 1 auto;
   color: rgba(122, 238, 255, 0.78);
   text-align: left;
 }
 
 .timestamp .uplink-countdown {
-  right: 0;
+  flex: 0 0 auto;
+  margin-left: auto;
   color: rgba(124, 255, 178, 0.9);
   text-align: right;
 }
