@@ -1,0 +1,61 @@
+.timestamp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-self: stretch;
+  gap: 8px;
+  text-align: left;
+}
+
+.timestamp span {
+  display: block;
+}
+
+.timestamp .sync-countdown,
+.timestamp .uplink-countdown {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.timestamp .sync-countdown {
+  color: rgba(122, 238, 255, 0.78);
+}
+
+.timestamp .uplink-countdown {
+  color: rgba(124, 255, 178, 0.9);
+  text-align: right;
+}
+
+.timestamp .sync-countdown.is-warning,
+.timestamp .uplink-countdown.is-warning,
+.billboard-shell.signal-lost .timestamp .sync-countdown,
+.billboard-shell.signal-lost .timestamp .uplink-countdown {
+  color: rgba(255, 48, 88, 0.98);
+  text-shadow:
+    1px 0 rgba(255, 42, 199, 0.72),
+    -1px 0 rgba(76, 225, 255, 0.42),
+    0 0 14px rgba(255, 48, 88, 0.54);
+}
+
+.city-ad-scan i {
+  width: 100%;
+  transform: scaleX(0.04);
+  transform-origin: left center;
+  animation: city-ad-fill 15s linear infinite;
+}
+
+body.tv-legacy .city-heartbeat {
+  display: none;
+}
+
+@keyframes city-ad-fill {
+  0% {
+    transform: scaleX(0.04);
+    filter: brightness(0.86);
+  }
+
+  100% {
+    transform: scaleX(1);
+    filter: brightness(1.18);
+  }
+}
