@@ -1,8 +1,9 @@
 .timestamp {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  position: relative;
+  display: block;
   align-self: stretch;
-  gap: 8px;
+  min-height: 1.22em;
+  width: 100%;
   text-align: left;
 }
 
@@ -12,16 +13,24 @@
 
 .timestamp .sync-countdown,
 .timestamp .uplink-countdown {
+  position: absolute;
+  bottom: 0;
+  max-width: 49%;
+  overflow: hidden;
+  text-overflow: clip;
   font-variant-numeric: tabular-nums;
   font-weight: 900;
   white-space: nowrap;
 }
 
 .timestamp .sync-countdown {
+  left: 0;
   color: rgba(122, 238, 255, 0.78);
+  text-align: left;
 }
 
 .timestamp .uplink-countdown {
+  right: 0;
   color: rgba(124, 255, 178, 0.9);
   text-align: right;
 }
