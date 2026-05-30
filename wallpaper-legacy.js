@@ -1,0 +1,447 @@
+(function () {
+  "use strict";
+
+  var uplinkMs = 6 * 60 * 1000;
+  var warningMs = 2 * uplinkMs;
+  var cacheHoldMs = 2 * 60 * 60 * 1000;
+  var defaultDuration = 10000;
+  var generationDuration = 20000;
+  var rnzLimit = 6;
+  var nextUplinkAt = new Date().getTime() + uplinkMs;
+  var slideStartedAt = new Date().getTime();
+  var slideIndex = 0;
+  var slides = [];
+  var lastSlideKey = "";
+  var loader = null;
+
+  var fuelOrder = ["Hydro", "Geothermal", "Wind", "Solar", "Gas", "Co-Gen", "Battery", "Coal", "Diesel/Oil"];
+  var sponsors = [
+    "RAINLINE SYSTEMS // CITY DATA, ALWAYS WATCHING",
+    "NEXUS WEATHER GRID // LIVE URBAN CONDITIONS",
+    "CHROMA TRANSIT // MOVE THROUGH THE NIGHT",
+    "SYNTHVISION OPTICS // RETUNE YOUR EYES",
+    "NEON AUTHORITY // NOTICE THE FUTURE"
+  ];
+
+  var dom = {};
+
+  function bySelector(selector) {
+    return document.querySelector(selector);
+  }
+
+  function liveData() {
+    return window.RAINLINE_DATA || {};
+  }
+
+  function isArray(value) {
+    return Object.prototype.toString.call(value) === "[object Array]";
+  }
+
+  function asArray(value) {
+    return isArray(value) ? value : [];
+  }
+
+  function text(value) {
+    if (value === null || typeof value === "undefined") return "";
+    return String(value);
+  }
+
+  function escapeHtml(value) {
+    return text(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function truncate(value, limit) {
+    var output = text(value).replace(/\s+/g, " ");
+    if (output.length <= limit) return output;
+    return output.substring(0, Math.max(0, limit - 7)).replace(/\s+\S*$/, "") + " [more]";
+  }
+
+  function numberValue(value, fallback) {
+    var parsed = Number(value);
+    return isFinite(parsed) ? parsed : fallback;
+  }
+
+  function formatMw(value) {
+    var number = numberValue(value, 0);
+    return Math.round(number).toLocaleString() + " MW";
+  }
+
+  function formatCompactMw(value) {
+    var number = numberValue(value, 0);
+    if (Math.abs(number) >= 1000) {
+      return (number / 1000).toFixed(1).replace(/\.0$/, "") + "GW";
+    }
+    return Math.round(number) + "MW";
+  }
+
+  function parseDate(value) {
+    if (!value) return null;
+    var date = new Date(value);
+    return isFinite(date.getTime()) ? date : null;
+  }
+
+  function generatedAt() {
+    return parseDate(liveData().generatedAt);
+  }
+
+  function signalAgeMs() {
+    var date = generatedAt();
+    if (!date) return Number.POSITIVE_INFINITY;
+    return Math.max(0, new Date().getTime() - date.getTime());
+  }
+
+  function formatSignalAge() {
+    var age = signalAgeMs();
+    if (!isFinite(age)) return "SIGNAL AGE --";
+    var minutes = Math.floor(age / 60000);
+    if (minutes < 60) return "SIGNAL AGE " + pad(minutes, 2) + "M";
+    return "SIGNAL AGE " + Math.floor(minutes / 60) + "H";
+  }
+
+  function pad(value, length) {
+    var output = String(value);
+    while (output.length < length) output = "0" + output;
+    return output;
+  }
+
+  function formatCountdown() {
+    var diffMs = nextUplinkAt - new Date().getTime();
+    if (diffMs <= 0) return "due now";
+    var totalSeconds = Math.ceil(diffMs / 1000);
+    var minutes = Math.floor(totalSeconds / 60);
+    var seconds = totalSeconds % 60;
+    return minutes + ":" + pad(seconds, 2);
+  }
+
+  function hasFreshEnoughData() {
+    return signalAgeMs() <= cacheHoldMs;
+  }
+
+  function needsAttention() {
+    return signalAgeMs() > warningMs;
+  }
+
+  function dataRoot(name) {
+    var data = liveData();
+    return data && data[name] ? data[name] : {};
+  }
+
+  function getRenewables() {
+    var transpower = dataRoot("transpower");
+    return {
+      percent: typeof transpower.renewablePercent !== "undefined" ? transpower.renewablePercent : "--",
+      renewableMw: transpower.renewableMw || 0,
+      totalMw: transpower.totalMw || 0,
+      fuels: transpower.fuels || {},
+      capacityMw: transpower.capacityMw || {},
+      utilisation: transpower.utilisation || {},
+      loadZones: transpower.loadZones || null
+    };
+  }
+
+  function formatFuel(fuel, renewables) {
+    var fuels = renewables.fuels || {};
+    var capacities = renewables.capacityMw || {};
+    var utilisation = renewables.utilisation || {};
+    var current = numberValue(fuels[fuel], 0);
+    var capacity = numberValue(capacities[fuel], 0);
+    var percent = utilisation[fuel] && isFinite(Number(utilisation[fuel].percent))
+      ? Number(utilisation[fuel].percent)
+      : capacity > 0 ? (current / capacity) * 100 : null;
+
+    if (capacity > 0 && percent !== null) {
+      return formatCompactMw(current) + "/" + formatCompactMw(capacity) + " " + Math.round(percent) + "%";
+    }
+    return formatMw(current);
+  }
+
+  function buildGenerationBody(renewables) {
+    var rows = "";
+    var i;
+    for (i = 0; i < fuelOrder.length; i += 1) {
+      if (typeof renewables.fuels[fuelOrder[i]] !== "undefined" || typeof renewables.capacityMw[fuelOrder[i]] !== "undefined") {
+        rows += "<div class=\"fuel-row\"><span>" + escapeHtml(fuelOrder[i]) + "</span><span>" + escapeHtml(formatFuel(fuelOrder[i], renewables)) + "</span></div>";
+      }
+    }
+
+    return "<div class=\"fuel-total\">" +
+      "<span>Total " + escapeHtml(formatMw(renewables.totalMw)) + "</span>" +
+      "<span>Renewable " + escapeHtml(formatMw(renewables.renewableMw)) + "</span>" +
+      "<span>Fuel MW / cap / use</span>" +
+      "</div><div class=\"fuel-grid\">" + (rows || "Waiting for generation breakdown.") + "</div>";
+  }
+
+  function buildLoadBody(load) {
+    var zones = asArray(load && load.zones).slice(0, 6);
+    var rows = "";
+    var i;
+    for (i = 0; i < zones.length; i += 1) {
+      rows += "<div class=\"data-row\"><strong>" + escapeHtml(zones[i].region || zones[i].zone || "Zone") + "</strong>" +
+        "<span>" + escapeHtml(formatCompactMw(zones[i].mw)) + " PF " + numberValue(zones[i].powerFactor, 0).toFixed(2) + "</span></div>";
+    }
+    return rows || "<p class=\"data-note\">Load data waiting.</p>";
+  }
+
+  function newsArticles() {
+    var rnz = dataRoot("rnz");
+    var articles = asArray(rnz.articles);
+    if (articles.length) return articles.slice(0, rnzLimit);
+    if (rnz.title || rnz.summary) {
+      return [{ rank: 1, title: rnz.title, summary: rnz.summary, feed: "RNZ" }];
+    }
+    return [];
+  }
+
+  function buildNewsBody(article) {
+    return "<div class=\"news-card\"><p>" + escapeHtml(truncate(article.summary || "Waiting for RNZ feed.", 220)) + "</p></div>";
+  }
+
+  function buildGeoNetBody(geo) {
+    var quakes = asArray(geo && geo.quakes);
+    var volcanoes = asArray(geo && geo.volcanoes);
+    var strongest = quakes.length ? quakes[0] : null;
+    var rows = "";
+    rows += "<div class=\"data-row\"><strong>Quakes</strong><span>" + quakes.length + " recent listed</span></div>";
+    if (strongest) {
+      rows += "<div class=\"data-block\"><strong>M" + escapeHtml(strongest.magnitude) + " " + escapeHtml(strongest.locality || "") + "</strong><span>" + escapeHtml(strongest.depthKm || "--") + "km deep</span></div>";
+    }
+    rows += "<div class=\"data-row\"><strong>Volcanoes</strong><span>" + volcanoes.length + " status feeds</span></div>";
+    if (volcanoes.length) {
+      rows += "<div class=\"data-block\"><strong>" + escapeHtml(volcanoes[0].title || "Volcano") + "</strong><span>Level " + escapeHtml(volcanoes[0].level) + " // " + escapeHtml(volcanoes[0].activity || "") + "</span></div>";
+    }
+    return rows;
+  }
+
+  function buildRoadBody(roadEvents) {
+    var events = asArray(roadEvents && roadEvents.events).slice(0, 3);
+    var rows = "";
+    var i;
+    for (i = 0; i < events.length; i += 1) {
+      rows += "<div class=\"data-block\"><strong>" + escapeHtml(events[i].type || events[i].status || "Road event") + "</strong>" +
+        "<span>" + escapeHtml(events[i].location || events[i].description || "Location waiting") + "</span></div>";
+    }
+    return rows || "<p class=\"data-note\">No current road events in the feed.</p>";
+  }
+
+  function buildTrafficBody(counts) {
+    var sites = asArray(counts && counts.sites).slice(0, 4);
+    var rows = "<p class=\"data-note\">Daily counted vehicles at selected NZTA telemetry sites.</p>";
+    var i;
+    rows += "<div class=\"data-row\"><strong>" + escapeHtml(counts && counts.region || "Traffic") + "</strong><span>" + escapeHtml(formatMw(counts && counts.total || 0)).replace(" MW", " vehicles") + "</span></div>";
+    for (i = 0; i < sites.length; i += 1) {
+      rows += "<div class=\"data-row\"><strong>" + escapeHtml(truncate(sites[i].description || "Site", 36)) + "</strong><span>" + Number(sites[i].total || 0).toLocaleString() + "</span></div>";
+    }
+    return rows;
+  }
+
+  function buildNemaBody(alerts) {
+    var rows = "";
+    var i;
+    for (i = 0; i < alerts.length; i += 1) {
+      rows += "<div class=\"data-block urgent\"><strong>" + escapeHtml(truncate(alerts[i].title || "Emergency alert", 64)) + "</strong>" +
+        "<span>" + escapeHtml(truncate(alerts[i].summary || "", 128)) + "</span></div>";
+    }
+    return rows;
+  }
+
+  function moonIllumination() {
+    var date = new Date();
+    var lp = 2551443;
+    var now = date.getTime() / 1000;
+    var newMoon = new Date(2001, 0, 24, 13, 7, 0).getTime() / 1000;
+    var phase = ((now - newMoon) % lp) / lp;
+    return Math.round((1 - Math.abs(phase - 0.5) * 2) * 100);
+  }
+
+  function buildSystemBody() {
+    return "<div class=\"data-row\"><strong>Luminance grid</strong><span>94%</span></div>" +
+      "<div class=\"data-row\"><strong>Skybridge flow</strong><span>61%</span></div>" +
+      "<div class=\"data-row\"><strong>Lower district signal</strong><span>88%</span></div>";
+  }
+
+  function addSlide(source, title, body, heartbeat, duration) {
+    slides.push({
+      source: source,
+      title: title,
+      body: body,
+      heartbeat: heartbeat || "CITY PULSE",
+      duration: duration || defaultDuration
+    });
+  }
+
+  function buildSlides() {
+    var renewables = getRenewables();
+    var rnz = newsArticles();
+    var geonet = dataRoot("geonet");
+    var waka = dataRoot("wakaKotahi");
+    var nema = dataRoot("nema");
+    var alerts = asArray(nema.alerts);
+    var i;
+
+    slides = [];
+    addSlide("TRANSPOWER GENERATION", renewables.percent + "% renewable", buildGenerationBody(renewables), "GRID PULSE", generationDuration);
+    if (renewables.loadZones) addSlide("TRANSPOWER LOAD", "Operational zones", buildLoadBody(renewables.loadZones), "GRID PULSE", defaultDuration);
+
+    for (i = 0; i < rnz.length; i += 1) {
+      addSlide("RNZ " + (i + 1) + "/" + rnz.length, rnz[i].title || "RNZ headline", buildNewsBody(rnz[i]), "FEED SIGNAL", defaultDuration);
+    }
+
+    if (geonet && (asArray(geonet.quakes).length || asArray(geonet.volcanoes).length)) {
+      addSlide("GEONET DATA", "Quakes + volcanoes", buildGeoNetBody(geonet), "SEISMIC NOISE", defaultDuration);
+    }
+    if (waka && waka.roadEvents) addSlide("WAKA KOTAHI", "Road events", buildRoadBody(waka.roadEvents), "ROAD FLOW", defaultDuration);
+    if (waka && waka.trafficCounts) addSlide("TRAFFIC COUNTS", "Daily vehicle count", buildTrafficBody(waka.trafficCounts), "ROAD FLOW", defaultDuration);
+    if (alerts.length) addSlide("NEMA ALERT", "Emergency notice", buildNemaBody(alerts), "SIGNAL LOSS", defaultDuration);
+
+    addSlide("NIGHT CYCLE", "Moon " + moonIllumination() + "%", "<div class=\"data-row\"><strong>City music feed</strong><span>Playlist: Neon Melancholy</span></div><div class=\"data-row\"><strong>Sunrise</strong><span>Local feed waiting</span></div>", "NIGHT CYCLE", defaultDuration);
+    addSlide("CITY INFRASTRUCTURE", "Deep City System", buildSystemBody(), "CITY HEART", defaultDuration);
+
+    if (!slides.length) {
+      addSlide("CITY SIGNAL", "NO FRESH DATA", "<div class=\"issue-slide\"><p>No cached feed is available yet.</p></div>", "SIGNAL LOSS", defaultDuration);
+    }
+  }
+
+  function asciiBars(value) {
+    var filled = Math.max(0, Math.min(10, Math.round(value)));
+    var output = "";
+    var i;
+    for (i = 0; i < 10; i += 1) output += i < filled ? "█" : "░";
+    return output;
+  }
+
+  function heartbeatValue(slide) {
+    var source = (slide.source + " " + slide.title).toLowerCase();
+    var renewables = getRenewables();
+    if (source.indexOf("road") >= 0 || source.indexOf("traffic") >= 0 || source.indexOf("waka") >= 0) return 6;
+    if (source.indexOf("geonet") >= 0 || source.indexOf("quake") >= 0) return 4;
+    if (source.indexOf("rnz") >= 0) return 8;
+    if (source.indexOf("transpower") >= 0 || source.indexOf("grid") >= 0) return Math.max(2, Math.min(10, numberValue(renewables.percent, 50) / 10));
+    return 7;
+  }
+
+  function setClass(element, className) {
+    if (element) element.className = className;
+  }
+
+  function renderFooter() {
+    var warning = needsAttention();
+    var colour = warning ? "rgba(255, 48, 88, 0.98)" : "rgba(124, 255, 178, 0.9)";
+    var shadow = warning ? "1px 0 rgba(255,42,199,.72), -1px 0 rgba(76,225,255,.42), 0 0 14px rgba(255,48,88,.54)" : "0 0 9px rgba(124,255,178,.32)";
+    if (dom.time) {
+      dom.time.innerHTML = "<span>" + escapeHtml(formatSignalAge()) + "</span>" +
+        "<span style=\"color:" + colour + ";text-shadow:" + shadow + ";\">NEXT UPLINK " + escapeHtml(formatCountdown()) + "</span>";
+    }
+  }
+
+  function renderTicker(slide) {
+    var textValue = "GRID " + (dataRoot("transpower").renewablePercent ? "OK" : "WAIT") +
+      " // RNZ " + (newsArticles().length ? "FEED OK" : "WAIT") +
+      " // NEXT UPLINK " + formatCountdown().toUpperCase() +
+      " // RAINLINE CITY NETWORK // PUBLIC DATA STREAM // SIGNAL STABLE";
+    if (dom.ticker) dom.ticker.innerHTML = escapeHtml(textValue + " // " + textValue);
+  }
+
+  function renderSlide(force) {
+    var now = new Date().getTime();
+    var slide;
+    var key;
+    if (!slides.length) buildSlides();
+
+    slide = slides[slideIndex % slides.length];
+    if (!hasFreshEnoughData()) {
+      slide = {
+        source: "CITY SIGNAL",
+        title: "NO FRESH DATA",
+        body: "<div class=\"issue-slide\"><p>Cached city data is more than two hours old.</p></div>",
+        heartbeat: "SIGNAL LOSS",
+        duration: defaultDuration
+      };
+    }
+
+    if (now - slideStartedAt > slide.duration) {
+      slideStartedAt = now;
+      slideIndex = (slideIndex + 1) % Math.max(1, slides.length);
+      slide = slides[slideIndex];
+      force = true;
+    }
+
+    key = slide.source + "|" + slide.title + "|" + slideIndex;
+    if (force || key !== lastSlideKey) {
+      lastSlideKey = key;
+      if (dom.shell) setClass(dom.shell, "billboard-shell" + (slide.source === "CITY SIGNAL" ? " signal-lost" : ""));
+      if (dom.source) dom.source.innerHTML = escapeHtml(slide.source);
+      if (dom.title) dom.title.innerHTML = escapeHtml(slide.title);
+      if (dom.sponsor) dom.sponsor.innerHTML = escapeHtml(sponsors[slideIndex % sponsors.length]);
+      if (dom.body) dom.body.innerHTML = slide.body;
+    }
+
+    updateHeartbeat(slide);
+    renderTicker(slide);
+    renderFooter();
+  }
+
+  function updateHeartbeat(slide) {
+    var value = heartbeatValue(slide);
+    var progress = Math.min(1, (new Date().getTime() - slideStartedAt) / Math.max(1000, slide.duration));
+    var shown = Math.max(1, value * progress);
+    if (dom.heartbeatLabel) dom.heartbeatLabel.innerHTML = escapeHtml(slide.heartbeat);
+    if (dom.heartbeatFill) dom.heartbeatFill.style.width = Math.max(3, shown * 10) + "%";
+    if (dom.heartbeatBars) dom.heartbeatBars.innerHTML = asciiBars(shown);
+  }
+
+  function loadFreshData() {
+    var script = document.createElement("script");
+    nextUplinkAt = new Date().getTime() + uplinkMs;
+    script.src = "./live-data.js?ts=" + new Date().getTime();
+    script.async = true;
+    script.onload = function () {
+      if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+      loader = script;
+      buildSlides();
+      renderSlide(true);
+    };
+    script.onerror = function () {
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+    document.getElementsByTagName("head")[0].appendChild(script);
+  }
+
+  function tick() {
+    if (new Date().getTime() >= nextUplinkAt) loadFreshData();
+    renderSlide(false);
+  }
+
+  function initDom() {
+    dom.video = document.getElementById("background-video");
+    dom.shell = bySelector(".billboard-shell");
+    dom.source = bySelector("[data-sign-source]");
+    dom.title = bySelector("[data-sign-title]");
+    dom.sponsor = bySelector("[data-sign-sponsor]");
+    dom.heartbeatLabel = bySelector("[data-heartbeat-label]");
+    dom.heartbeatFill = bySelector("[data-heartbeat-fill]");
+    dom.heartbeatBars = bySelector("[data-heartbeat-bars]");
+    dom.body = bySelector("[data-sign-body]");
+    dom.ticker = bySelector("[data-sign-ticker]");
+    dom.time = bySelector("[data-sign-time]");
+  }
+
+  function start() {
+    initDom();
+    if (dom.video && dom.video.play) {
+      try {
+        var playResult = dom.video.play();
+        if (playResult && playResult.catch) playResult.catch(function () {});
+      } catch (ignore) {}
+    }
+    buildSlides();
+    renderSlide(true);
+    setInterval(tick, 1000);
+  }
+
+  start();
+})();
