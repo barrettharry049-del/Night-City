@@ -1,0 +1,35 @@
+name: Backup Rainline City refresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17,47 * * * *"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check-and-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Dispatch refresh when publishing is stale
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow pages.yml --status success --limit 1 --json createdAt --jq '.[0].createdAt // ""')"
+          if [ -z "$latest" ]; then
+            echo "No successful publish found; dispatching refresh."
+            gh workflow run pages.yml --repo "$GITHUB_REPOSITORY"
+            exit 0
+          fi
+
+          age_seconds=$(( $(date -u +%s) - $(date -u -d "$latest" +%s) ))
+          echo "Latest successful publish age: ${age_seconds}s"
+          if [ "$age_seconds" -ge 1800 ]; then
+            gh workflow run pages.yml --repo "$GITHUB_REPOSITORY"
+          else
+            echo "Recent publish found; backup refresh is not needed."
+          fi
