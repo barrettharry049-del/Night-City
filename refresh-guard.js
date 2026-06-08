@@ -31,11 +31,11 @@
 
   function formatAge() {
     const age = signalAgeMs();
-    if (!Number.isFinite(age)) return "SIGNAL AGE --";
+    if (!Number.isFinite(age)) return "DATA AGE --";
 
     const minutes = Math.floor(age / 60000);
-    if (minutes < 60) return `SIGNAL AGE ${String(minutes).padStart(2, "0")}M`;
-    return `SIGNAL AGE ${Math.floor(minutes / 60)}H`;
+    if (minutes < 60) return `DATA AGE ${String(minutes).padStart(2, "0")}M`;
+    return `DATA AGE ${Math.floor(minutes / 60)}H`;
   }
 
   function formatCountdown() {
@@ -80,8 +80,8 @@
       : "0 0 9px rgba(124,255,178,.32)";
 
     time.innerHTML = `
-      <span>${formatAge()}</span>
-      <span class="${warning ? "is-warning" : ""}" style="color:${colour};text-shadow:${shadow};">NEXT UPLINK ${formatCountdown()}</span>
+      <span class="data-age">${formatAge()}</span>
+      <span class="uplink-countdown${warning ? " is-warning" : ""}" style="color:${colour};text-shadow:${shadow};">NEXT UPLINK ${formatCountdown()}</span>
     `;
 
     const ticker = document.querySelector("[data-sign-ticker]");

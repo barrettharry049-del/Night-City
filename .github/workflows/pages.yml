@@ -12,13 +12,14 @@ on:
       - "wallpaper.js"
       - "wallpaper-legacy.js"
       - "wallpaper-normal-tweaks.js"
+      - "footer-data-age-legacy.js"
       - "refresh-guard.js"
       - "live-data.js"
       - "Update-LiveData.ps1"
       - ".github/workflows/**"
   workflow_dispatch:
   schedule:
-    - cron: "3,9,15,21,27,33,39,45,51,57 * * * *"
+    - cron: "*/6 * * * *"
 
 permissions:
   contents: read
@@ -31,11 +32,12 @@ env:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 12
 
     steps:
       - name: Check out repository
@@ -62,6 +64,23 @@ jobs:
           $json = $payload | ConvertTo-Json -Depth 20 -Compress
           $js = "window.RAINLINE_DATA = $json;`nwindow.dispatchEvent(new CustomEvent('rainline-data-updated', { detail: window.RAINLINE_DATA }));`n"
           [System.IO.File]::WriteAllText($path, $js, [System.Text.UTF8Encoding]::new($false))
+
+      - name: Validate publishable data
+        shell: pwsh
+        run: |
+          $path = Join-Path $PWD "live-data.js"
+          $content = Get-Content -Raw $path
+          $match = [regex]::Match($content, "window\.RAINLINE_DATA\s*=\s*(.*?);\s*window\.dispatchEvent", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+          if (-not $match.Success) {
+            throw "Could not validate RAINLINE_DATA payload in live-data.js"
+          }
+
+          $payload = $match.Groups[1].Value | ConvertFrom-Json
+          $errors = @($payload.errors)
+          if ($null -eq $payload.transpower -or $null -eq $payload.rnz -or $errors.Count -ge 3) {
+            $detail = if ($errors.Count) { $errors -join " | " } else { "Core feed data is missing." }
+            throw "Generated data is incomplete; keeping the previous working Pages deployment. $detail"
+          }
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
