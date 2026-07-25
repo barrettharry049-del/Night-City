@@ -37,7 +37,7 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 12
+    timeout-minutes: 16
 
     steps:
       - name: Check out repository
@@ -83,6 +83,17 @@ jobs:
           }
 
       - name: Configure GitHub Pages
+        id: configure_pages_1
+        continue-on-error: true
+        uses: actions/configure-pages@v6
+
+      - name: Wait before Pages configure retry
+        if: steps.configure_pages_1.outcome == 'failure'
+        shell: pwsh
+        run: Start-Sleep -Seconds 30
+
+      - name: Configure GitHub Pages retry
+        if: steps.configure_pages_1.outcome == 'failure'
         uses: actions/configure-pages@v6
 
       - name: Upload site
@@ -91,4 +102,26 @@ jobs:
           path: .
 
       - name: Deploy to GitHub Pages
+        id: deploy_pages_1
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+
+      - name: Wait before Pages deploy retry
+        if: steps.deploy_pages_1.outcome == 'failure'
+        shell: pwsh
+        run: Start-Sleep -Seconds 60
+
+      - name: Deploy to GitHub Pages retry
+        id: deploy_pages_2
+        if: steps.deploy_pages_1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+
+      - name: Wait before final Pages deploy retry
+        if: steps.deploy_pages_1.outcome == 'failure' && steps.deploy_pages_2.outcome == 'failure'
+        shell: pwsh
+        run: Start-Sleep -Seconds 120
+
+      - name: Deploy to GitHub Pages final retry
+        if: steps.deploy_pages_1.outcome == 'failure' && steps.deploy_pages_2.outcome == 'failure'
         uses: actions/deploy-pages@v5
