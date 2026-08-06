@@ -51,10 +51,12 @@ let currentRenderedKey = "";
 let transitionTimers = [];
 let currentHeartbeat = null;
 let currentPaidAd = null;
-let nextLocalPollAt = Date.now() + 30000;
-const defaultSlideDurationMs = 10000;
-const generationSlideDurationMs = 20000;
-const refreshGraceMs = 90000;
+const defaultSlideDurationMs = 15000;
+const generationSlideDurationMs = 25000;
+const uplinkIntervalMs = 6 * 60 * 1000;
+const cacheHoldMs = 2 * 60 * 60 * 1000;
+const uplinkWarningMs = cacheHoldMs;
+let nextLocalPollAt = Date.now() + uplinkIntervalMs;
 const rnzMaxArticles = 6;
 const rareEventChance = 0.18;
 const fuelOrder = ["Hydro", "Geothermal", "Wind", "Solar", "Gas", "Co-Gen", "Battery", "Coal", "Diesel/Oil"];
@@ -652,6 +654,19 @@ async function updateNews() {
   }
 }
 
+function cachedDataExpired() {
+  const generatedAt = data.generatedAt?.getTime?.() || 0;
+  if (!generatedAt) return true;
+
+  return Date.now() > generatedAt + uplinkWarningMs;
+}
+
+function markBrowserRefreshTime() {
+  const now = new Date();
+  data.generatedAt = now;
+  data.nextRefreshAt = new Date(now.getTime() + uplinkIntervalMs);
+}
+
 function formatFuelUtilisation(fuel, fuels, capacities, utilisation) {
   const current = Number(utilisation[fuel]?.currentMw ?? fuels[fuel] ?? 0);
   const capacity = Number(utilisation[fuel]?.capacityMw ?? capacities[fuel] ?? 0);
@@ -878,28 +893,44 @@ function buildNemaBody(alerts) {
   return rows || "<p class=\"data-note\">No current NEMA alerts.</p>";
 }
 
+function dataAgeMs() {
+  const generatedAt = data.generatedAt?.getTime?.() || 0;
+  return generatedAt ? Date.now() - generatedAt : Number.POSITIVE_INFINITY;
+}
+
+function hasUsableCoreData() {
+  const hasGrid = Boolean(data.renewables && !data.renewables.fallback);
+  const hasNews = data.newsArticles.some((article) => !article.fallback);
+  return hasGrid || hasNews;
+}
+
+function uplinkNeedsAttention() {
+  return forcedIssue
+    || !hasUsableCoreData()
+    || dataAgeMs() > uplinkWarningMs;
+}
+
+function cacheHoldExpired() {
+  return dataAgeMs() > cacheHoldMs;
+}
+
 function feedIssue() {
   const errors = data.errors || [];
   const errorText = errors.join(" | ");
-  const target = nextRefreshDate();
   const generatedAt = data.generatedAt?.getTime?.() || 0;
-  const refreshMs = Math.max(60000, Number(data.refreshIntervalSeconds || 600) * 1000);
-  const isStale = Boolean(generatedAt && (
-    (target && Date.now() > target.getTime() + refreshGraceMs) ||
-    Date.now() > generatedAt + refreshMs + refreshGraceMs
-  ));
+  const isStale = cacheHoldExpired();
   const coreFeedsFailed = /Transpower:/i.test(errorText) && /RNZ:/i.test(errorText);
   const manyFeedsFailed = errors.length >= 3;
-  const noCoreData = !data.renewables && data.newsArticles.length === 0;
+  const noCoreData = !hasUsableCoreData();
 
-  if (!forcedIssue && !isStale && !coreFeedsFailed && !manyFeedsFailed && !noCoreData) {
+  if (!forcedIssue && !isStale && !noCoreData) {
     return { active: false };
   }
 
   const problemLines = [];
   if (forcedIssue) problemLines.push("Forced city issue preview.");
-  if (isStale) problemLines.push("Live data missed its refresh window.");
-  if (coreFeedsFailed || manyFeedsFailed) problemLines.push("Network feeds failed during the last update attempt.");
+  if (isStale) problemLines.push("Cached city data is more than two hours old.");
+  if ((coreFeedsFailed || manyFeedsFailed) && isStale) problemLines.push("Network feeds failed during recent update attempts.");
   if (noCoreData) problemLines.push("No cached core grid or RNZ data is available.");
   if (errors.length) problemLines.push(`Feed errors: ${errors.slice(0, 3).map((error) => error.split(":")[0]).join(", ")}.`);
 
@@ -928,10 +959,7 @@ function buildIssueSlide(issue) {
         ${issue.lines.slice(0, 4).map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
       </div>
     `,
-    timeHtml: `
-      <span class="danger-label">NEXT RELINK ATTEMPT</span>
-      <span class="danger-countdown">${escapeHtml(formatCountdown(nextReconnectDate()).toUpperCase())}</span>
-    `,
+    timeHtml: buildRefreshFooterHtml(true),
   };
 }
 
@@ -954,6 +982,14 @@ function nextReconnectDate() {
 
   const retrySeconds = Math.max(5, Number(data.retryIntervalSeconds || 30));
   return new Date(Date.now() + retrySeconds * 1000);
+}
+
+function nextUplinkDate() {
+  if (nextLocalPollAt && nextLocalPollAt > Date.now()) {
+    return new Date(nextLocalPollAt);
+  }
+
+  return new Date(Date.now() + uplinkIntervalMs);
 }
 
 function formatCountdown(target) {
@@ -981,9 +1017,9 @@ function buildTickerText(content) {
   const rnzStatus = data.newsArticles.length ? "RNZ FEED OK" : "RNZ WAIT";
   const geoStatus = data.geonet ? "GEONET LIVE" : "GEONET WAIT";
   const roadStatus = data.wakaKotahi.roadEvents ? "ROAD DATA LIVE" : "ROAD DATA WAIT";
-  const next = formatCountdown(nextRefreshDate()).toUpperCase();
+  const next = formatCountdown(nextUplinkDate()).toUpperCase();
   const slide = `${content.source || "RAINLINE"} ${content.title || ""}`.trim();
-  return `${gridStatus} // ${rnzStatus} // ${geoStatus} // ${roadStatus} // ${slide} // NEXT SYNC ${next} // RAINLINE CITY NETWORK // PUBLIC DATA STREAM // SIGNAL STABLE`;
+  return `${gridStatus} // ${rnzStatus} // ${geoStatus} // ${roadStatus} // ${slide} // NEXT UPLINK ${next} // RAINLINE CITY NETWORK // PUBLIC DATA STREAM // SIGNAL STABLE`;
 }
 
 function heartbeatForSlide(content) {
@@ -1150,11 +1186,12 @@ function schedulePaidAds() {
   }, randomBetween(6500, 18000));
 }
 
-function buildRefreshFooterHtml() {
-  const target = nextRefreshDate();
+function buildRefreshFooterHtml(forceWarning = false) {
+  const warning = forceWarning || uplinkNeedsAttention();
+  const warningClass = warning ? " is-warning" : "";
   return `
-    <span>${escapeHtml(formatSignalAge())}</span>
-    <span>NEXT SYNC ${escapeHtml(formatCountdown(target))}</span>
+    <span class="data-age">${escapeHtml(formatSignalAge().replace(/^SIGNAL AGE/i, "DATA AGE"))}</span>
+    <span class="uplink-countdown${warningClass}">NEXT UPLINK ${escapeHtml(formatCountdown(nextUplinkDate()))}</span>
   `;
 }
 
@@ -1479,13 +1516,20 @@ function renderSlide() {
 async function refreshData() {
   try {
     const hasLocalData = await loadLocalLiveData();
-    if (!hasLocalData) {
+    const needsBrowserFallback = !hasLocalData || cachedDataExpired();
+    if (needsBrowserFallback) {
       await Promise.allSettled([updateRenewables(), updateNews()]);
+      const browserRefreshWorked = Boolean(data.renewables && !data.renewables.fallback)
+        || data.newsArticles.some((article) => !article.fallback);
+
+      if (browserRefreshWorked) {
+        markBrowserRefreshTime();
+      }
     }
   } catch (error) {
     data.errors.unshift(`Wallpaper refresh: ${error.message}`);
   } finally {
-    nextLocalPollAt = Date.now() + 30 * 1000;
+    nextLocalPollAt = Date.now() + uplinkIntervalMs;
     renderSlide();
   }
 }
@@ -1506,7 +1550,7 @@ setTimeout(() => {
   showPaidAd();
   schedulePaidAds();
 }, 2800);
-setInterval(refreshData, 30 * 1000);
+setInterval(refreshData, uplinkIntervalMs);
 setInterval(renderSlide, 1000);
 window.addEventListener("resize", () => {
   if (!currentPaidAd) return;

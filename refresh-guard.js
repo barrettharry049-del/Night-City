@@ -1,7 +1,7 @@
 (function () {
   const uplinkMs = 6 * 60 * 1000;
-  const warningMs = 2 * uplinkMs;
   const cacheHoldMs = 2 * 60 * 60 * 1000;
+  const warningMs = cacheHoldMs;
   const source = "./live-data.js";
   let nextUplinkAt = Date.now() + uplinkMs;
   let loader = null;

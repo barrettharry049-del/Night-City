@@ -2,8 +2,8 @@
   "use strict";
 
   var uplinkMs = 6 * 60 * 1000;
-  var warningMs = 2 * uplinkMs;
   var cacheHoldMs = 2 * 60 * 60 * 1000;
+  var warningMs = cacheHoldMs;
   var defaultDuration = 15000;
   var generationDuration = 25000;
   var rnzLimit = 6;
@@ -264,10 +264,10 @@
 
   function formatSignalAge() {
     var age = signalAgeMs();
-    if (!isFinite(age)) return "SIGNAL AGE --";
+    if (!isFinite(age)) return "DATA AGE --";
     var minutes = Math.floor(age / 60000);
-    if (minutes < 60) return "SIGNAL AGE " + pad(minutes, 2) + "M";
-    return "SIGNAL AGE " + Math.floor(minutes / 60) + "H";
+    if (minutes < 60) return "DATA AGE " + pad(minutes, 2) + "M";
+    return "DATA AGE " + Math.floor(minutes / 60) + "H";
   }
 
   function pad(value, length) {
@@ -533,7 +533,7 @@
     var colour = warning ? "rgba(255, 48, 88, 0.98)" : "rgba(124, 255, 178, 0.9)";
     var shadow = warning ? "1px 0 rgba(255,42,199,.72), -1px 0 rgba(76,225,255,.42), 0 0 14px rgba(255,48,88,.54)" : "0 0 9px rgba(124,255,178,.32)";
     if (dom.time) {
-      dom.time.innerHTML = "<span>" + escapeHtml(formatSignalAge()) + "</span>" +
+      dom.time.innerHTML = "<span class=\"data-age\">" + escapeHtml(formatSignalAge()) + "</span>" +
         "<span style=\"color:" + colour + ";text-shadow:" + shadow + ";\">NEXT UPLINK " + escapeHtml(formatCountdown()) + "</span>";
     }
   }

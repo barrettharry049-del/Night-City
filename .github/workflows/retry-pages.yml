@@ -1,46 +1,14 @@
-name: Retry failed Rainline City publish
+name: Retry failed Rainline City publish disabled
 
 on:
-  workflow_run:
-    workflows:
-      - "Update and publish Rainline City"
-    types:
-      - completed
+  workflow_dispatch:
 
 permissions:
-  actions: write
   contents: read
 
 jobs:
-  retry:
-    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 3 }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
-
     steps:
-      - name: Retry failed publish jobs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
-        run: |
-          attempt=1
-          delay=15
-
-          while true; do
-            if gh run rerun "$RUN_ID" --failed --repo "$GITHUB_REPOSITORY"; then
-              exit 0
-            fi
-
-            if [ "$attempt" -ge 5 ]; then
-              echo "Could not dispatch rerun after ${attempt} attempts."
-              exit 1
-            fi
-
-            echo "Retry dispatch failed; trying again in ${delay}s."
-            sleep "$delay"
-            attempt=$((attempt + 1))
-            delay=$((delay * 2))
-            if [ "$delay" -gt 120 ]; then
-              delay=120
-            fi
-          done
+      - name: Explain disabled workflow
+        run: echo "Disabled. The site no longer uses action-based Pages deployments."

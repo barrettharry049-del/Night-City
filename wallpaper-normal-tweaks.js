@@ -70,7 +70,7 @@
 
     var generatedAt = new Date(window.RAINLINE_DATA.generatedAt);
     if (!Number.isFinite(generatedAt.getTime())) return true;
-    return Date.now() - generatedAt.getTime() > 12 * 60 * 1000;
+    return Date.now() - generatedAt.getTime() > 2 * 60 * 60 * 1000;
   }
 
   function footerHtml(forceWarning) {

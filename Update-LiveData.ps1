@@ -2,6 +2,7 @@ param(
   [switch]$Loop,
   [int]$IntervalSeconds = 600,
   [int]$RetrySeconds = 30,
+  [int]$RequestTimeoutSeconds = 20,
   [switch]$NoRetryOnFailure,
   [string]$OutFile = ""
 )
@@ -27,7 +28,7 @@ function ConvertFrom-HtmlText {
 
 function Invoke-WebText {
   param([string]$Uri)
-  $response = Invoke-WebRequest -UseBasicParsing $Uri -Headers @{ "User-Agent" = "RainlineCityWallpaper/1.0" }
+  $response = Invoke-WebRequest -UseBasicParsing $Uri -TimeoutSec $RequestTimeoutSeconds -Headers @{ "User-Agent" = "RainlineCityWallpaper/1.0" }
 
   if ($response.RawContentStream) {
     if ($response.RawContentStream.CanSeek) {
@@ -56,7 +57,7 @@ function Invoke-WebJson {
     "Accept" = $Accept
   }
 
-  return Invoke-RestMethod -Uri $Uri -Headers $headers
+  return Invoke-RestMethod -Uri $Uri -TimeoutSec $RequestTimeoutSeconds -Headers $headers
 }
 
 function ConvertFrom-UnixMilliseconds {
@@ -163,36 +164,41 @@ function Get-RnzData {
   )
 
   $articleMap = @{}
+  $feedErrors = @()
 
   foreach ($feed in $feeds) {
-    $rss = Invoke-WebText $feed.Uri
-    [xml]$xml = $rss
+    try {
+      $rss = Invoke-WebText $feed.Uri
+      [xml]$xml = $rss
 
-    foreach ($item in @($xml.rss.channel.item | Select-Object -First 25)) {
-      $title = ConvertFrom-HtmlText $item.title
-      $link = [string]$item.link
-      if ([string]::IsNullOrWhiteSpace($title) -or [string]::IsNullOrWhiteSpace($link) -or $link -match "/404") {
-        continue
-      }
+      foreach ($item in @($xml.rss.channel.item | Select-Object -First 25)) {
+        $title = ConvertFrom-HtmlText $item.title
+        $link = [string]$item.link
+        if ([string]::IsNullOrWhiteSpace($title) -or [string]::IsNullOrWhiteSpace($link) -or $link -match "/404") {
+          continue
+        }
 
-      $published = if ($item.pubDate) { [datetimeoffset]::Parse($item.pubDate) } else { [datetimeoffset]::Now }
-      $key = $link.ToLowerInvariant()
-      $article = [ordered]@{
-        rank = 0
-        title = $title
-        summary = (ConvertFrom-HtmlText (Get-RnzDescription $item))
-        publishedAt = $published.ToString("o")
-        link = $link
-        feed = $feed.Name
-        priorityScore = 0
-      }
-      $article.priorityScore = Get-RnzPriorityScore $article
+        $published = if ($item.pubDate) { [datetimeoffset]::Parse($item.pubDate) } else { [datetimeoffset]::Now }
+        $key = $link.ToLowerInvariant()
+        $article = [ordered]@{
+          rank = 0
+          title = $title
+          summary = (ConvertFrom-HtmlText (Get-RnzDescription $item))
+          publishedAt = $published.ToString("o")
+          link = $link
+          feed = $feed.Name
+          priorityScore = 0
+        }
+        $article.priorityScore = Get-RnzPriorityScore $article
 
-      if (-not $articleMap.ContainsKey($key)) {
-        $articleMap[$key] = $article
-      } elseif ($article.priorityScore -gt $articleMap[$key].priorityScore) {
-        $articleMap[$key] = $article
+        if (-not $articleMap.ContainsKey($key)) {
+          $articleMap[$key] = $article
+        } elseif ($article.priorityScore -gt $articleMap[$key].priorityScore) {
+          $articleMap[$key] = $article
+        }
       }
+    } catch {
+      $feedErrors += "$($feed.Name): $($_.Exception.Message)"
     }
   }
 
@@ -221,6 +227,7 @@ function Get-RnzData {
     link = $articles[0].link
     updatedAt = (Get-Date).ToString("o")
     articles = $articles
+    feedErrors = $feedErrors
   }
 }
 

@@ -1,52 +1,40 @@
-name: Update and publish Rainline City
+name: Refresh Rainline City data
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "index.html"
-      - "index-tv.html"
-      - "style.css"
-      - "footer-tweaks.css"
-      - "wallpaper.js"
-      - "wallpaper-legacy.js"
-      - "wallpaper-normal-tweaks.js"
-      - "footer-data-age-legacy.js"
-      - "refresh-guard.js"
-      - "live-data.js"
-      - "Update-LiveData.ps1"
-      - ".github/workflows/**"
   workflow_dispatch:
   schedule:
-    - cron: "2-59/6 * * * *"
+    - cron: "8,38 * * * *"
 
 permissions:
-  contents: read
+  contents: write
   pages: write
-  id-token: write
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  NODE_OPTIONS: --no-deprecation
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: rainline-live-data
+  cancel-in-progress: true
 
 jobs:
-  build:
+  refresh:
     runs-on: windows-latest
-    timeout-minutes: 16
+    timeout-minutes: 12
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - name: Check out repository without marketplace actions
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          git config --global --add safe.directory "$PWD"
+          git remote add origin "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin main
+          git checkout --force FETCH_HEAD
+          git switch -C main
 
       - name: Generate live data
         shell: pwsh
         run: |
-          ./Update-LiveData.ps1 -IntervalSeconds 360 -NoRetryOnFailure -OutFile "$PWD/live-data.js"
+          ./Update-LiveData.ps1 -IntervalSeconds 1800 -RequestTimeoutSeconds 20 -NoRetryOnFailure -OutFile "$PWD/live-data.js"
 
       - name: Normalize refresh metadata
         shell: pwsh
@@ -59,8 +47,8 @@ jobs:
           }
           $payload = $match.Groups[1].Value | ConvertFrom-Json
           $generatedAt = [datetimeoffset]::Parse($payload.generatedAt)
-          $payload.refreshIntervalSeconds = 360
-          $payload.nextRefreshAt = $generatedAt.AddSeconds(360).ToString("o")
+          $payload.refreshIntervalSeconds = 1800
+          $payload.nextRefreshAt = $generatedAt.AddSeconds(1800).ToString("o")
           $json = $payload | ConvertTo-Json -Depth 20 -Compress
           $js = "window.RAINLINE_DATA = $json;`nwindow.dispatchEvent(new CustomEvent('rainline-data-updated', { detail: window.RAINLINE_DATA }));`n"
           [System.IO.File]::WriteAllText($path, $js, [System.Text.UTF8Encoding]::new($false))
@@ -79,49 +67,51 @@ jobs:
           $errors = @($payload.errors)
           if ($null -eq $payload.transpower -or $null -eq $payload.rnz -or $errors.Count -ge 3) {
             $detail = if ($errors.Count) { $errors -join " | " } else { "Core feed data is missing." }
-            throw "Generated data is incomplete; keeping the previous working Pages deployment. $detail"
+            throw "Generated data is incomplete; keeping the previous published data. $detail"
           }
 
-      - name: Configure GitHub Pages
-        id: configure_pages_1
-        continue-on-error: true
-        uses: actions/configure-pages@v6
-
-      - name: Wait before Pages configure retry
-        if: steps.configure_pages_1.outcome == 'failure'
+      - name: Commit refreshed data
         shell: pwsh
-        run: Start-Sleep -Seconds 30
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Configure GitHub Pages retry
-        if: steps.configure_pages_1.outcome == 'failure'
-        uses: actions/configure-pages@v6
+          if (-not (git status --porcelain -- live-data.js)) {
+            Write-Host "live-data.js is unchanged."
+            exit 0
+          }
 
-      - name: Upload site
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: .
+          git add live-data.js
+          git commit -m "Refresh live data"
 
-      - name: Deploy to GitHub Pages
-        id: deploy_pages_1
-        continue-on-error: true
-        uses: actions/deploy-pages@v5
+          $delay = 10
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            git push origin HEAD:main
+            if ($LASTEXITCODE -eq 0) {
+              break
+            }
 
-      - name: Wait before Pages deploy retry
-        if: steps.deploy_pages_1.outcome == 'failure'
+            if ($attempt -eq 5) {
+              throw "Could not push refreshed live-data.js after $attempt attempts."
+            }
+
+            Write-Warning "Push failed; rebasing and trying again in ${delay}s."
+            Start-Sleep -Seconds $delay
+            git fetch --depth=1 origin main
+            git rebase origin/main
+            $delay = [Math]::Min($delay * 2, 60)
+          }
+
+      - name: Request GitHub Pages rebuild
         shell: pwsh
-        run: Start-Sleep -Seconds 60
-
-      - name: Deploy to GitHub Pages retry
-        id: deploy_pages_2
-        if: steps.deploy_pages_1.outcome == 'failure'
-        continue-on-error: true
-        uses: actions/deploy-pages@v5
-
-      - name: Wait before final Pages deploy retry
-        if: steps.deploy_pages_1.outcome == 'failure' && steps.deploy_pages_2.outcome == 'failure'
-        shell: pwsh
-        run: Start-Sleep -Seconds 120
-
-      - name: Deploy to GitHub Pages final retry
-        if: steps.deploy_pages_1.outcome == 'failure' && steps.deploy_pages_2.outcome == 'failure'
-        uses: actions/deploy-pages@v5
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $output = gh api -X POST "repos/$env:GITHUB_REPOSITORY/pages/builds" 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Could not request a Pages rebuild explicitly. Branch publishing should still rebuild from the pushed commit. $output"
+          } else {
+            Write-Host $output
+          }
