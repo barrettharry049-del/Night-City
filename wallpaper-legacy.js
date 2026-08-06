@@ -7,6 +7,7 @@
   var defaultDuration = 15000;
   var generationDuration = 25000;
   var rnzLimit = 6;
+  var githubLiveDataUrl = "https://raw.githubusercontent.com/barrettharry049-del/Night-City/main/live-data.js";
   var nextUplinkAt = new Date().getTime() + uplinkMs;
   var slideStartedAt = new Date().getTime();
   var slideIndex = 0;
@@ -137,6 +138,10 @@
 
   function liveData() {
     return window.RAINLINE_DATA || {};
+  }
+
+  function liveDataSource() {
+    return window.RAINLINE_LIVE_DATA_URL || githubLiveDataUrl;
   }
 
   function isArray(value) {
@@ -706,10 +711,45 @@
     }, randomBetween(6500, 18000));
   }
 
-  function loadFreshData() {
+  function cacheBustedUrl(source) {
+    return source + (source.indexOf("?") >= 0 ? "&" : "?") + "ts=" + new Date().getTime();
+  }
+
+  function fetchText(url, done, fail) {
+    if (!window.fetch) {
+      fail();
+      return;
+    }
+
+    window.fetch(url, { cache: "no-store" })
+      .then(function (response) {
+        if (!response || !response.ok) throw new Error("Fetch failed");
+        return response.text();
+      })
+      .then(done)
+      .catch(function () {
+        window.fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(url), { cache: "no-store" })
+          .then(function (response) {
+            if (!response || !response.ok) throw new Error("Proxy fetch failed");
+            return response.text();
+          })
+          .then(done)
+          .catch(fail);
+      });
+  }
+
+  function applyFreshDataText(sourceText) {
+    try {
+      new Function(sourceText)();
+      return true;
+    } catch (ignore) {
+      return false;
+    }
+  }
+
+  function loadFreshDataScript(source) {
     var script = document.createElement("script");
-    nextUplinkAt = new Date().getTime() + uplinkMs;
-    script.src = "./live-data.js?ts=" + new Date().getTime();
+    script.src = cacheBustedUrl(source);
     script.async = true;
     script.onload = function () {
       if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
@@ -721,6 +761,27 @@
       if (script.parentNode) script.parentNode.removeChild(script);
     };
     document.getElementsByTagName("head")[0].appendChild(script);
+  }
+
+  function loadFreshData() {
+    var source = liveDataSource();
+    nextUplinkAt = new Date().getTime() + uplinkMs;
+
+    if (/^https?:\/\//i.test(source)) {
+      fetchText(cacheBustedUrl(source), function (sourceText) {
+        if (applyFreshDataText(sourceText)) {
+          buildSlides();
+          renderSlide(true);
+        } else {
+          loadFreshDataScript("./live-data.js");
+        }
+      }, function () {
+        loadFreshDataScript("./live-data.js");
+      });
+      return;
+    }
+
+    loadFreshDataScript(source);
   }
 
   function tick() {

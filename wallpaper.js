@@ -60,8 +60,10 @@ let nextLocalPollAt = Date.now() + uplinkIntervalMs;
 const rnzMaxArticles = 6;
 const rareEventChance = 0.18;
 const fuelOrder = ["Hydro", "Geothermal", "Wind", "Solar", "Gas", "Co-Gen", "Battery", "Coal", "Diesel/Oil"];
+const githubLiveDataUrl = "https://raw.githubusercontent.com/barrettharry049-del/Night-City/main/live-data.js";
 const localDataSources = Array.from(new Set([
   window.RAINLINE_LIVE_DATA_URL,
+  githubLiveDataUrl,
   "./live-data.js",
 ].filter(Boolean)));
 const query = new URLSearchParams(window.location.search);
@@ -566,6 +568,22 @@ function loadLocalLiveData(sourceIndex = 0) {
     const source = localDataSources[sourceIndex];
     if (!source) {
       resolve(applyLocalLiveData());
+      return;
+    }
+
+    if (/^https?:\/\//i.test(source)) {
+      const url = `${source}${source.includes("?") ? "&" : "?"}ts=${Date.now()}`;
+      fetchTextViaProxy(url)
+        .then((sourceText) => {
+          try {
+            new Function(sourceText)();
+            resolve(applyLocalLiveData());
+          } catch (error) {
+            data.errors.push(`Live data parse: ${error.message}`);
+            resolve(loadLocalLiveData(sourceIndex + 1));
+          }
+        })
+        .catch(() => resolve(loadLocalLiveData(sourceIndex + 1)));
       return;
     }
 
